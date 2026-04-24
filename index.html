@@ -122,6 +122,22 @@
     animation: pulseGlow 2s ease-in-out infinite;
   }
 
+  .panel-toggle-btn {
+    height: 28px;
+    padding: 0 10px;
+    background: transparent;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    color: var(--text-muted);
+    font-family: var(--font-mono);
+    font-size: 9px;
+    letter-spacing: 1px;
+    cursor: pointer;
+    transition: all 0.15s;
+    white-space: nowrap;
+  }
+  .panel-toggle-btn:hover { border-color: var(--border-hover); color: var(--green); background: var(--green-ghost); }
+
   @keyframes pulseGlow {
     0%,100% { box-shadow: 0 0 4px rgba(0,255,65,0.2); }
     50% { box-shadow: 0 0 10px rgba(0,255,65,0.5); }
@@ -133,6 +149,15 @@
     grid-template-columns: 1fr 240px;
     min-height: 0;
     overflow: hidden;
+    transition: grid-template-columns 0.2s ease;
+  }
+
+  .body.panel-collapsed {
+    grid-template-columns: 1fr;
+  }
+
+  .body.panel-collapsed .controls {
+    display: none;
   }
 
   /* ─── CANVAS ZONE ─── */
@@ -209,6 +234,64 @@
 
   .hud span { display: block; }
   .hud b { color: var(--green); font-weight: normal; }
+
+  .assist-overlay {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    display: none;
+    z-index: 25;
+  }
+
+  .assist-overlay.show { display: block; }
+
+  .golden-grid,
+  .leveler {
+    position: absolute;
+    inset: 0;
+    display: none;
+  }
+
+  .assist-overlay.grid-on .golden-grid { display: block; }
+  .assist-overlay.level-on .leveler { display: block; }
+
+  .golden-grid .line {
+    position: absolute;
+    background: rgba(255, 200, 80, 0.72);
+    box-shadow: 0 0 6px rgba(255, 200, 80, 0.35);
+  }
+
+  .golden-grid .line.v { width: 1px; top: 0; bottom: 0; }
+  .golden-grid .line.h { height: 1px; left: 0; right: 0; }
+  .golden-grid .v1 { left: 38.2%; }
+  .golden-grid .v2 { left: 61.8%; }
+  .golden-grid .h1 { top: 38.2%; }
+  .golden-grid .h2 { top: 61.8%; }
+
+  .leveler-line {
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    width: 68%;
+    height: 2px;
+    background: rgba(0, 229, 255, 0.9);
+    box-shadow: 0 0 8px rgba(0, 229, 255, 0.45);
+    transform: translate(-50%, -50%);
+    transform-origin: center;
+  }
+
+  .leveler-bubble {
+    position: absolute;
+    left: 50%;
+    top: calc(50% - 9px);
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    border: 1px solid rgba(0, 229, 255, 0.9);
+    background: rgba(0, 229, 255, 0.25);
+    box-shadow: 0 0 8px rgba(0, 229, 255, 0.4);
+    transform: translate(-50%, -50%);
+  }
 
   /* ─── CONTROLS PANEL ─── */
   .controls {
@@ -558,15 +641,24 @@
     /* hide sidebar on mobile — use bottom sheet */
     .controls { display: none; }
 
-    .mobile-toggle { display: flex; }
+    .mobile-toggle {
+      display: flex;
+      bottom: calc(70px + env(safe-area-inset-bottom, 0px));
+      right: 12px;
+    }
     .sheet-overlay { display: block; opacity: 0; pointer-events: none; transition: opacity 0.3s; }
     .sheet-overlay.open { opacity: 1; pointer-events: all; }
 
     .canvas-zone { border-right: none; }
 
-    footer { padding: 6px 12px; }
+    footer { padding: 6px 72px 6px 12px; }
     .footer-stat { font-size: 8px; }
     .footer-btn { font-size: 8px; padding: 0 10px; }
+    .panel-toggle-btn { display: none; }
+  }
+
+  @media (min-width: 601px) {
+    .assist-overlay { display: none !important; }
   }
 
   /* Very small phones */
@@ -627,6 +719,7 @@
     <div class="header-meta">
       <span id="fpsDisplay" style="font-size:10px;letter-spacing:1px;color:var(--text-muted)">0 FPS</span>
       <span class="status-badge" id="statusBadge">STANDBY</span>
+      <button class="panel-toggle-btn" id="desktopPanelToggle" onclick="toggleDesktopPanel()">HIDE PANEL</button>
     </div>
   </header>
 
@@ -655,6 +748,19 @@
         <span>ROWS: <b id="hudRows">—</b></span>
         <span>SRC: <b id="hudSrc">—</b></span>
         <span id="hudCamRow" style="display:none">CAM: <b id="hudCam">—</b></span>
+      </div>
+
+      <div class="assist-overlay" id="assistOverlay">
+        <div class="golden-grid">
+          <span class="line v v1"></span>
+          <span class="line v v2"></span>
+          <span class="line h h1"></span>
+          <span class="line h h2"></span>
+        </div>
+        <div class="leveler">
+          <div class="leveler-line" id="levelerLine"></div>
+          <div class="leveler-bubble" id="levelerBubble"></div>
+        </div>
       </div>
     </div>
 
@@ -738,7 +844,7 @@
       <!-- EXPORT -->
       <div class="section">
         <div class="section-title">Export</div>
-        <button class="btn" id="dlBtn" onclick="downloadPNG()" disabled>⬇ Download PNG</button>
+        <button class="btn" id="dlBtn" onclick="captureFrame()" disabled>⬇ Capture</button>
         <button class="btn" id="copyBtn" onclick="copyASCII()" disabled>⬆ Copy Text</button>
         <button class="btn" id="copyHtmlBtn" onclick="copyHTML()" disabled>◈ Copy as HTML</button>
       </div>
@@ -754,7 +860,7 @@
       <span class="footer-stat">MODE: <b id="footMode">MATRIX</b></span>
     </div>
     <div class="footer-actions">
-      <button class="footer-btn" id="footDlBtn" onclick="downloadPNG()" disabled>⬇ PNG</button>
+      <button class="footer-btn" id="footDlBtn" onclick="captureFrame()" disabled>⬇ CAPTURE</button>
       <button class="footer-btn" id="footCopyBtn" onclick="copyASCII()" disabled>⬆ TEXT</button>
     </div>
   </footer>
@@ -825,6 +931,12 @@
       <button class="color-swatch" data-mode="invert" onclick="setColorMode(this)" style="background:#fff;color:#000;border-color:#ffffff40">Invert</button>
     </div>
   </div>
+
+  <div class="section">
+    <div class="section-title">Mobile Assist</div>
+    <button class="btn" id="gridToggleBtnM" onclick="toggleMobileGrid()">Grid: Off</button>
+    <button class="btn" id="levelerToggleBtnM" onclick="toggleMobileLeveler()">Leveler: Off</button>
+  </div>
 </div>
 
 <!-- NOTIFICATION -->
@@ -874,6 +986,10 @@ let state = {
   colorMode: 'matrix',
   customChars: '',
   facingMode: 'user',   // 'user' = front cam, 'environment' = rear cam
+  mobileGrid: false,
+  mobileLeveler: false,
+  panelCollapsed: false,
+  tilt: 0,
 };
 
 let stream = null;
@@ -881,6 +997,7 @@ let rafId = null;
 let uploadedImg = null;
 let fpsCounter = { frames: 0, last: 0, fps: 0 };
 let gridSize = { cols: 0, rows: 0 };
+let levelerBound = false;
 
 const els = {
   outputCanvas: document.getElementById('outputCanvas'),
@@ -1181,6 +1298,87 @@ function setActiveSource() {
   document.getElementById('footMode').textContent = state.colorMode.toUpperCase();
 }
 
+function toggleDesktopPanel() {
+  if (window.innerWidth <= 600) return;
+  state.panelCollapsed = !state.panelCollapsed;
+  const body = document.querySelector('.body');
+  const btn = document.getElementById('desktopPanelToggle');
+  body.classList.toggle('panel-collapsed', state.panelCollapsed);
+  if (btn) btn.textContent = state.panelCollapsed ? 'SHOW PANEL' : 'HIDE PANEL';
+}
+
+function updateLevelerVisual() {
+  const line = document.getElementById('levelerLine');
+  const bubble = document.getElementById('levelerBubble');
+  if (!line || !bubble) return;
+  const tilt = Math.max(-45, Math.min(45, state.tilt || 0));
+  const bubbleOffset = (tilt / 45) * 120;
+  line.style.transform = `translate(-50%, -50%) rotate(${tilt}deg)`;
+  bubble.style.transform = `translate(calc(-50% + ${bubbleOffset}px), -50%)`;
+}
+
+function onDeviceOrientation(e) {
+  if (!state.mobileLeveler) return;
+  if (typeof e.gamma === 'number') {
+    state.tilt = e.gamma;
+    updateLevelerVisual();
+  }
+}
+
+async function ensureLevelerPermission() {
+  if (typeof DeviceOrientationEvent === 'undefined') return true;
+  if (typeof DeviceOrientationEvent.requestPermission === 'function') {
+    try {
+      const p = await DeviceOrientationEvent.requestPermission();
+      return p === 'granted';
+    } catch {
+      return false;
+    }
+  }
+  return true;
+}
+
+function refreshMobileAssistUI() {
+  const overlay = document.getElementById('assistOverlay');
+  const gridBtn = document.getElementById('gridToggleBtnM');
+  const levelBtn = document.getElementById('levelerToggleBtnM');
+  if (overlay) {
+    overlay.classList.toggle('show', state.mobileGrid || state.mobileLeveler);
+    overlay.classList.toggle('grid-on', state.mobileGrid);
+    overlay.classList.toggle('level-on', state.mobileLeveler);
+  }
+  if (gridBtn) {
+    gridBtn.textContent = `Grid: ${state.mobileGrid ? 'On' : 'Off'}`;
+    gridBtn.classList.toggle('active', state.mobileGrid);
+  }
+  if (levelBtn) {
+    levelBtn.textContent = `Leveler: ${state.mobileLeveler ? 'On' : 'Off'}`;
+    levelBtn.classList.toggle('active', state.mobileLeveler);
+  }
+}
+
+function toggleMobileGrid() {
+  state.mobileGrid = !state.mobileGrid;
+  refreshMobileAssistUI();
+}
+
+async function toggleMobileLeveler() {
+  if (!state.mobileLeveler) {
+    const ok = await ensureLevelerPermission();
+    if (!ok) {
+      notify('Leveler permission denied');
+      return;
+    }
+    if (!levelerBound) {
+      window.addEventListener('deviceorientation', onDeviceOrientation);
+      levelerBound = true;
+    }
+  }
+  state.mobileLeveler = !state.mobileLeveler;
+  if (state.mobileLeveler) updateLevelerVisual();
+  refreshMobileAssistUI();
+}
+
 /* ─────────────────────────────────────────
    SLIDERS
 ───────────────────────────────────────── */
@@ -1259,14 +1457,18 @@ function setColorMode(btn) {
 /* ─────────────────────────────────────────
    EXPORT
 ───────────────────────────────────────── */
-function downloadPNG() {
+function captureFrame() {
   const canvas = els.outputCanvas;
   if (!canvas || state.source === 'idle') return;
   const a = document.createElement('a');
   a.href = canvas.toDataURL('image/png');
-  a.download = 'ascii-art-' + Date.now() + '.png';
+  a.download = 'ascii-capture-' + Date.now() + '.png';
   a.click();
-  notify('PNG downloaded!');
+  notify('Capture saved');
+}
+
+function downloadPNG() {
+  captureFrame();
 }
 
 function getRawASCII() {
@@ -1368,7 +1570,7 @@ window.addEventListener('resize', () => {
 document.addEventListener('keydown', e => {
   if (e.target.tagName === 'INPUT') return;
   if (e.key === 'w' || e.key === 'W') toggleWebcam();
-  if (e.key === 's' || e.key === 'S') downloadPNG();
+  if (e.key === 's' || e.key === 'S') captureFrame();
   if (e.key === 'c' || e.key === 'C') copyASCII();
   if (e.key === '+' || e.key === '=') {
     const sl = document.getElementById('fontSizeSlider');
@@ -1387,6 +1589,7 @@ document.addEventListener('keydown', e => {
 ───────────────────────────────────────── */
 updateCharsPreview();
 hideContent();
+refreshMobileAssistUI();
 </script>
 </body>
 </html>

@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
-<title>ASCII_Ver1</title>
+<title>Ascii_v1</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Orbitron:wght@400;600;700;900&display=swap" rel="stylesheet">
 <style>
@@ -577,14 +577,40 @@
 
   /* Large desktop */
   @media (min-width: 1400px) {
-    .body { 
-        grid-template-columns: 1fr 280px; 
-        --panel-pad: 18px;
-    }
+    .body { grid-template-columns: 1fr 280px; }
+    :root { --panel-pad: 18px; }
   }
 
   /* hidden input */
   #fileInput { display: none; }
+
+  /* ─── CAMERA SWITCH BUTTON (mobile/tablet) ─── */
+  .cam-switch-btn {
+    display: none;
+    position: fixed;
+    bottom: 16px;
+    left: 16px;
+    width: 48px; height: 48px;
+    border-radius: 50%;
+    background: var(--bg3);
+    border: 1px solid rgba(0,229,255,0.5);
+    color: #00e5ff;
+    font-size: 20px;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    z-index: 200;
+    box-shadow: 0 0 14px rgba(0,229,255,0.25);
+    transition: all 0.2s;
+    line-height: 1;
+  }
+  .cam-switch-btn:active { transform: scale(0.92) rotate(180deg); }
+  .cam-switch-btn.visible { display: flex; }
+
+  /* show cam switch on tablet too */
+  @media (max-width: 900px) {
+    .cam-switch-btn.visible { display: flex; }
+  }
 </style>
 </head>
 <body>
@@ -594,7 +620,7 @@
   <!-- HEADER -->
   <header>
     <div class="logo">
-      <span class="logo-dot" id="logoDot"></span>ASCII_Ver1
+      <span class="logo-dot" id="logoDot"></span>ASCII_V1
     </div>
     <div class="header-meta">
       <span id="fpsDisplay" style="font-size:10px;letter-spacing:1px;color:var(--text-muted)">0 FPS</span>
@@ -626,6 +652,7 @@
         <span>COLS: <b id="hudCols">—</b></span>
         <span>ROWS: <b id="hudRows">—</b></span>
         <span>SRC: <b id="hudSrc">—</b></span>
+        <span id="hudCamRow" style="display:none">CAM: <b id="hudCam">—</b></span>
       </div>
     </div>
 
@@ -636,6 +663,7 @@
       <div class="section">
         <div class="section-title">Input Source</div>
         <button class="btn" id="webcamBtn" onclick="toggleWebcam()">▶ Webcam</button>
+        <button class="btn" id="flipCamBtn" onclick="switchCamera()" style="display:none;border-color:rgba(0,229,255,0.3);color:rgba(0,229,255,0.7)">⇄ Flip Camera</button>
         <button class="btn" onclick="document.getElementById('fileInput').click()">⬆ Upload Image</button>
         <input type="file" id="fileInput" accept="image/*" onchange="loadImage(event)">
       </div>
@@ -734,6 +762,9 @@
 <!-- MOBILE TOGGLE -->
 <button class="mobile-toggle" id="mobileToggle" onclick="openSheet()">⚙</button>
 
+<!-- CAMERA SWITCH (mobile + tablet) -->
+<button class="cam-switch-btn" id="camSwitchBtn" onclick="switchCamera()" title="Switch Camera">⇄</button>
+
 <!-- SHEET OVERLAY -->
 <div class="sheet-overlay" id="sheetOverlay" onclick="closeSheet()"></div>
 
@@ -749,6 +780,7 @@
   <div class="section">
     <div class="section-title">Input Source</div>
     <button class="btn" id="webcamBtnM" onclick="toggleWebcam()">▶ Webcam</button>
+    <button class="btn" id="flipCamBtnM" onclick="switchCamera();closeSheet();" style="display:none;border-color:rgba(0,229,255,0.3);color:rgba(0,229,255,0.7)">⇄ Flip Camera</button>
     <button class="btn" onclick="document.getElementById('fileInput').click()">⬆ Upload Image</button>
   </div>
 
@@ -839,6 +871,7 @@ let state = {
   charSet: 'complex',
   colorMode: 'matrix',
   customChars: '',
+  facingMode: 'user',   // 'user' = front cam, 'environment' = rear cam
 };
 
 let stream = null;
@@ -902,7 +935,19 @@ function processFrame() {
   hidden.height = rows;
 
   const hctx = hidden.getContext('2d', { willReadFrequently: true });
+
+  // Mirror correction: front camera ('user') is naturally mirrored by the browser.
+  // We flip it back so the ASCII output is NOT mirrored — what goes right stays right.
+  // Rear camera ('environment') is not mirrored, so no flip needed.
+  const shouldFlip = state.source === 'webcam' && state.facingMode === 'user';
+  hctx.save();
+  if (shouldFlip) {
+    hctx.translate(cols, 0);
+    hctx.scale(-1, 1);
+  }
   hctx.drawImage(src, 0, 0, cols, rows);
+  hctx.restore();
+
   const imgData = hctx.getImageData(0, 0, cols, rows).data;
 
   const octx = output.getContext('2d');
@@ -950,6 +995,14 @@ function processFrame() {
     document.getElementById('footCols').textContent = cols;
     document.getElementById('footRows').textContent = rows;
   }
+  // Always keep cam label fresh
+  if (state.source === 'webcam') {
+    const camLabel = state.facingMode === 'user' ? 'FRONT' : 'REAR';
+    document.getElementById('hudCam').textContent = camLabel;
+    document.getElementById('hudCamRow').style.display = 'block';
+  } else {
+    document.getElementById('hudCamRow').style.display = 'none';
+  }
 }
 
 function startLoop() {
@@ -968,23 +1021,52 @@ function stopLoop() {
 /* ─────────────────────────────────────────
    WEBCAM
 ───────────────────────────────────────── */
+async function startCamera(facingMode) {
+  // Stop any existing stream first
+  if (stream) { stream.getTracks().forEach(t => t.stop()); stream = null; }
+
+  // Build constraints — on desktop 'environment' may not exist, fall back gracefully
+  const constraints = {
+    video: {
+      facingMode: { ideal: facingMode },
+      width: { ideal: 1280 },
+      height: { ideal: 720 },
+      frameRate: { ideal: 30 }
+    }
+  };
+
+  try {
+    stream = await navigator.mediaDevices.getUserMedia(constraints);
+  } catch(e) {
+    // If facingMode ideal failed (e.g. no rear cam), try without it
+    try {
+      stream = await navigator.mediaDevices.getUserMedia({ video: true });
+    } catch(e2) {
+      notify('Camera denied or unavailable');
+      return false;
+    }
+  }
+
+  // Detect actual facing mode from the track settings
+  const track = stream.getVideoTracks()[0];
+  const settings = track?.getSettings?.() || {};
+  state.facingMode = settings.facingMode || facingMode;
+
+  els.video.srcObject = stream;
+  await els.video.play();
+  return true;
+}
+
 async function toggleWebcam() {
   if (state.source === 'webcam') {
     stopWebcam(); return;
   }
-  try {
-    stream = await navigator.mediaDevices.getUserMedia({
-      video: { width: { ideal: 1280 }, height: { ideal: 720 }, frameRate: { ideal: 30 } }
-    });
-    els.video.srcObject = stream;
-    await els.video.play();
-    state.source = 'webcam';
-    setActiveSource();
-    showContent();
-    startLoop();
-  } catch(e) {
-    notify('Camera denied or unavailable');
-  }
+  const ok = await startCamera(state.facingMode);
+  if (!ok) return;
+  state.source = 'webcam';
+  setActiveSource();
+  showContent();
+  startLoop();
 }
 
 function stopWebcam() {
@@ -994,6 +1076,31 @@ function stopWebcam() {
   setActiveSource();
   hideContent();
   stopLoop();
+  // Hide the switch button
+  document.getElementById('camSwitchBtn').classList.remove('visible');
+}
+
+async function switchCamera() {
+  if (state.source !== 'webcam') return;
+  const next = state.facingMode === 'user' ? 'environment' : 'user';
+  state.facingMode = next;
+
+  const btn = document.getElementById('camSwitchBtn');
+  btn.style.opacity = '0.4';
+  btn.style.pointerEvents = 'none';
+
+  const ok = await startCamera(state.facingMode);
+  if (!ok) {
+    // Roll back
+    state.facingMode = state.facingMode === 'user' ? 'environment' : 'user';
+    notify('Could not switch camera');
+  } else {
+    const label = state.facingMode === 'user' ? 'FRONT' : 'REAR';
+    notify('Camera: ' + label);
+  }
+
+  btn.style.opacity = '1';
+  btn.style.pointerEvents = 'auto';
 }
 
 /* ─────────────────────────────────────────
@@ -1032,6 +1139,13 @@ function showContent() {
     const el = document.getElementById(id);
     if (el) el.disabled = false;
   });
+  // Show camera switch button on mobile/tablet when webcam is active
+  const camBtn = document.getElementById('camSwitchBtn');
+  if (live) {
+    camBtn.classList.add('visible');
+  } else {
+    camBtn.classList.remove('visible');
+  }
 }
 
 function hideContent() {
@@ -1048,13 +1162,19 @@ function hideContent() {
 }
 
 function setActiveSource() {
-  const webcamLabel = state.source === 'webcam' ? '■ Stop Webcam' : '▶ Webcam';
+  const isLive = state.source === 'webcam';
+  const webcamLabel = isLive ? '■ Stop Webcam' : '▶ Webcam';
   ['webcamBtn','webcamBtnM'].forEach(id => {
     const el = document.getElementById(id);
     if (el) {
       el.textContent = webcamLabel;
-      el.className = 'btn' + (state.source === 'webcam' ? ' active' : '');
+      el.className = 'btn' + (isLive ? ' active' : '');
     }
+  });
+  // Show/hide flip button in sidebar + sheet
+  ['flipCamBtn','flipCamBtnM'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.style.display = isLive ? 'flex' : 'none';
   });
   document.getElementById('footMode').textContent = state.colorMode.toUpperCase();
 }
@@ -1159,7 +1279,14 @@ function getRawASCII() {
   const cols = Math.floor(ow / fw), rows = Math.floor(oh / fh);
   hidden.width = cols; hidden.height = rows;
   const hctx = hidden.getContext('2d', { willReadFrequently: true });
+
+  // Same mirror fix as processFrame
+  const shouldFlip = state.source === 'webcam' && state.facingMode === 'user';
+  hctx.save();
+  if (shouldFlip) { hctx.translate(cols, 0); hctx.scale(-1, 1); }
   hctx.drawImage(src, 0, 0, cols, rows);
+  hctx.restore();
+
   const data = hctx.getImageData(0, 0, cols, rows).data;
   const clen = chars.length - 1;
   let txt = '';

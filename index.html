@@ -1,0 +1,1263 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<title>ASCII_Ver1</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Orbitron:wght@400;600;700;900&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --green: #00ff41;
+    --green-dim: rgba(0,255,65,0.5);
+    --green-faint: rgba(0,255,65,0.12);
+    --green-ghost: rgba(0,255,65,0.06);
+    --amber: #ffb300;
+    --cyan: #00e5ff;
+    --bg: #030803;
+    --bg2: #060d06;
+    --bg3: #0a140a;
+    --border: rgba(0,255,65,0.15);
+    --border-hover: rgba(0,255,65,0.4);
+    --text-muted: rgba(0,255,65,0.45);
+    --text-dim: rgba(0,255,65,0.25);
+    --font-mono: 'Share Tech Mono', 'Courier New', monospace;
+    --font-display: 'Orbitron', monospace;
+    --radius: 3px;
+    --panel-pad: 14px;
+    --ctrl-height: 36px;
+  }
+
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  html, body {
+    width: 100%; height: 100%;
+    background: var(--bg);
+    color: var(--green);
+    font-family: var(--font-mono);
+    overflow: hidden;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  /* ─── SCANLINES ─── */
+  body::after {
+    content: '';
+    pointer-events: none;
+    position: fixed; inset: 0;
+    background: repeating-linear-gradient(
+      0deg, transparent, transparent 2px,
+      rgba(0,0,0,0.06) 2px, rgba(0,0,0,0.06) 4px
+    );
+    z-index: 9999;
+  }
+
+  /* ─── LAYOUT ─── */
+  .app {
+    display: grid;
+    grid-template-rows: auto 1fr auto;
+    height: 100vh;
+    max-height: 100vh;
+    overflow: hidden;
+  }
+
+  /* ─── HEADER ─── */
+  header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 10px 16px;
+    border-bottom: 1px solid var(--border);
+    background: var(--bg2);
+    flex-shrink: 0;
+    gap: 12px;
+  }
+
+  .logo {
+    font-family: var(--font-display);
+    font-size: clamp(11px, 2vw, 15px);
+    font-weight: 900;
+    letter-spacing: 4px;
+    color: var(--green);
+    text-shadow: 0 0 12px rgba(0,255,65,0.6);
+    white-space: nowrap;
+  }
+
+  .logo-dot {
+    display: inline-block;
+    width: 7px; height: 7px;
+    border-radius: 50%;
+    background: var(--green);
+    margin-right: 8px;
+    box-shadow: 0 0 6px var(--green);
+    animation: blink 1.4s ease-in-out infinite;
+  }
+
+  @keyframes blink {
+    0%,100% { opacity: 1; box-shadow: 0 0 6px var(--green); }
+    50% { opacity: 0.3; box-shadow: none; }
+  }
+
+  .header-meta {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    font-size: 10px;
+    color: var(--text-muted);
+    letter-spacing: 1px;
+    flex-shrink: 0;
+  }
+
+  .status-badge {
+    padding: 3px 8px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    font-size: 9px;
+    letter-spacing: 1.5px;
+    background: var(--green-ghost);
+  }
+
+  .status-badge.live {
+    border-color: var(--green-dim);
+    color: var(--green);
+    animation: pulseGlow 2s ease-in-out infinite;
+  }
+
+  @keyframes pulseGlow {
+    0%,100% { box-shadow: 0 0 4px rgba(0,255,65,0.2); }
+    50% { box-shadow: 0 0 10px rgba(0,255,65,0.5); }
+  }
+
+  /* ─── MAIN BODY ─── */
+  .body {
+    display: grid;
+    grid-template-columns: 1fr 240px;
+    min-height: 0;
+    overflow: hidden;
+  }
+
+  /* ─── CANVAS ZONE ─── */
+  .canvas-zone {
+    position: relative;
+    background: #000;
+    border-right: 1px solid var(--border);
+    overflow: hidden;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  #outputCanvas {
+    display: block;
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+  }
+
+  .empty-state {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 12px;
+    pointer-events: none;
+  }
+
+  .empty-icon {
+    font-family: var(--font-mono);
+    font-size: clamp(28px, 5vw, 48px);
+    color: var(--text-dim);
+    letter-spacing: -4px;
+    animation: shimmer 3s ease-in-out infinite;
+  }
+
+  @keyframes shimmer {
+    0%,100% { opacity: 0.3; }
+    50% { opacity: 0.8; }
+  }
+
+  .empty-text {
+    font-size: clamp(10px, 1.5vw, 12px);
+    color: var(--text-dim);
+    letter-spacing: 2px;
+    text-align: center;
+    line-height: 1.8;
+  }
+
+  .corner {
+    position: absolute;
+    width: 16px; height: 16px;
+    border-color: var(--text-dim);
+    border-style: solid;
+    pointer-events: none;
+  }
+  .corner-tl { top: 12px; left: 12px; border-width: 1px 0 0 1px; }
+  .corner-tr { top: 12px; right: 12px; border-width: 1px 1px 0 0; }
+  .corner-bl { bottom: 12px; left: 12px; border-width: 0 0 1px 1px; }
+  .corner-br { bottom: 12px; right: 12px; border-width: 0 1px 1px 0; }
+
+  .hud {
+    position: absolute;
+    top: 10px; left: 10px;
+    font-size: 9px;
+    color: var(--text-muted);
+    letter-spacing: 1px;
+    line-height: 1.8;
+    pointer-events: none;
+  }
+
+  .hud span { display: block; }
+  .hud b { color: var(--green); font-weight: normal; }
+
+  /* ─── CONTROLS PANEL ─── */
+  .controls {
+    background: var(--bg2);
+    overflow-y: auto;
+    overflow-x: hidden;
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+    scrollbar-width: thin;
+    scrollbar-color: var(--border) transparent;
+  }
+
+  .controls::-webkit-scrollbar { width: 3px; }
+  .controls::-webkit-scrollbar-thumb { background: var(--border); }
+
+  .section {
+    padding: var(--panel-pad);
+    border-bottom: 1px solid var(--border);
+  }
+
+  .section-title {
+    font-family: var(--font-display);
+    font-size: 8px;
+    font-weight: 600;
+    letter-spacing: 3px;
+    color: var(--text-muted);
+    margin-bottom: 10px;
+    text-transform: uppercase;
+  }
+
+  /* ─── BUTTONS ─── */
+  .btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    width: 100%;
+    padding: 0 10px;
+    height: var(--ctrl-height);
+    background: transparent;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    color: var(--text-muted);
+    font-family: var(--font-mono);
+    font-size: 11px;
+    letter-spacing: 1px;
+    cursor: pointer;
+    transition: all 0.15s;
+    margin-bottom: 6px;
+    white-space: nowrap;
+  }
+  .btn:last-child { margin-bottom: 0; }
+  .btn:hover { border-color: var(--border-hover); color: var(--green); background: var(--green-ghost); }
+  .btn.active { border-color: var(--green-dim); color: var(--green); background: var(--green-faint); box-shadow: 0 0 8px rgba(0,255,65,0.15); }
+  .btn.danger { border-color: rgba(255,60,60,0.3); color: rgba(255,100,100,0.7); }
+  .btn.danger:hover { border-color: rgba(255,60,60,0.7); color: #ff6060; background: rgba(255,60,60,0.08); }
+  .btn.success { border-color: rgba(0,255,65,0.5); color: var(--green); }
+
+  .btn-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 6px;
+    margin-bottom: 0;
+  }
+
+  .btn-grid .btn { margin-bottom: 0; height: 30px; font-size: 10px; }
+
+  /* ─── SLIDERS ─── */
+  .slider-row {
+    margin-bottom: 10px;
+  }
+  .slider-row:last-child { margin-bottom: 0; }
+
+  .slider-label {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 5px;
+  }
+
+  .slider-name { font-size: 10px; color: var(--text-muted); letter-spacing: 1px; }
+  .slider-val { font-size: 11px; color: var(--green); min-width: 36px; text-align: right; }
+
+  input[type="range"] {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 100%;
+    height: 2px;
+    background: var(--border);
+    border-radius: 1px;
+    outline: none;
+    cursor: pointer;
+  }
+  input[type="range"]::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    width: 14px; height: 14px;
+    border-radius: 50%;
+    background: var(--green);
+    box-shadow: 0 0 6px rgba(0,255,65,0.7);
+    cursor: pointer;
+    transition: box-shadow 0.15s;
+  }
+  input[type="range"]:hover::-webkit-slider-thumb { box-shadow: 0 0 10px rgba(0,255,65,0.9); }
+  input[type="range"]::-moz-range-thumb {
+    width: 14px; height: 14px;
+    border-radius: 50%;
+    background: var(--green);
+    border: none;
+    box-shadow: 0 0 6px rgba(0,255,65,0.7);
+    cursor: pointer;
+  }
+
+  /* ─── CHAR PREVIEW ─── */
+  .chars-preview {
+    font-size: 8px;
+    color: var(--text-dim);
+    word-break: break-all;
+    line-height: 1.5;
+    margin-top: 6px;
+    border: 1px solid var(--border);
+    padding: 4px 6px;
+    border-radius: var(--radius);
+    min-height: 28px;
+    background: var(--green-ghost);
+    letter-spacing: 1px;
+  }
+
+  .custom-input {
+    width: 100%;
+    background: transparent;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    color: var(--green);
+    font-family: var(--font-mono);
+    font-size: 11px;
+    padding: 6px 8px;
+    outline: none;
+    transition: border-color 0.15s;
+    margin-top: 6px;
+  }
+  .custom-input::placeholder { color: var(--text-dim); }
+  .custom-input:focus { border-color: var(--border-hover); }
+
+  /* ─── COLOR SWATCHES ─── */
+  .color-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 5px;
+  }
+
+  .color-swatch {
+    height: 28px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    cursor: pointer;
+    font-family: var(--font-mono);
+    font-size: 9px;
+    letter-spacing: 0.5px;
+    transition: all 0.15s;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: transparent;
+  }
+  .color-swatch:hover { border-color: var(--border-hover); transform: scale(1.04); }
+  .color-swatch.active { border-width: 1.5px; box-shadow: 0 0 6px rgba(0,255,65,0.2); }
+
+  /* ─── BOTTOM BAR ─── */
+  footer {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 8px 16px;
+    border-top: 1px solid var(--border);
+    background: var(--bg2);
+    flex-shrink: 0;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+
+  .footer-left {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    flex-wrap: wrap;
+  }
+
+  .footer-stat {
+    font-size: 9px;
+    color: var(--text-muted);
+    letter-spacing: 1px;
+  }
+  .footer-stat b { color: var(--green); font-weight: normal; }
+
+  .footer-actions {
+    display: flex;
+    gap: 6px;
+  }
+
+  .footer-btn {
+    height: 28px;
+    padding: 0 12px;
+    background: transparent;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    color: var(--text-muted);
+    font-family: var(--font-mono);
+    font-size: 9px;
+    letter-spacing: 1px;
+    cursor: pointer;
+    transition: all 0.15s;
+    white-space: nowrap;
+  }
+  .footer-btn:hover { border-color: var(--border-hover); color: var(--green); background: var(--green-ghost); }
+  .footer-btn:disabled { opacity: 0.3; cursor: not-allowed; }
+
+  /* ─── NOTIFICATION ─── */
+  .notif {
+    position: fixed;
+    bottom: 60px;
+    left: 50%;
+    transform: translateX(-50%) translateY(20px);
+    background: var(--bg3);
+    border: 1px solid var(--green-dim);
+    color: var(--green);
+    font-family: var(--font-mono);
+    font-size: 11px;
+    padding: 8px 20px;
+    border-radius: var(--radius);
+    letter-spacing: 1px;
+    opacity: 0;
+    transition: all 0.25s;
+    pointer-events: none;
+    z-index: 1000;
+    box-shadow: 0 0 20px rgba(0,255,65,0.2);
+  }
+  .notif.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+
+  /* ─── MOBILE BOTTOM SHEET ─── */
+  .mobile-toggle {
+    display: none;
+    position: fixed;
+    bottom: 16px;
+    right: 16px;
+    width: 48px; height: 48px;
+    border-radius: 50%;
+    background: var(--bg3);
+    border: 1px solid var(--green-dim);
+    color: var(--green);
+    font-size: 18px;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    z-index: 200;
+    box-shadow: 0 0 16px rgba(0,255,65,0.3);
+  }
+
+  .sheet-overlay {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.7);
+    z-index: 300;
+    backdrop-filter: blur(2px);
+  }
+
+  .sheet {
+    position: fixed;
+    bottom: 0; left: 0; right: 0;
+    background: var(--bg2);
+    border-top: 1px solid var(--border);
+    border-radius: 12px 12px 0 0;
+    z-index: 400;
+    max-height: 75vh;
+    overflow-y: auto;
+    transform: translateY(100%);
+    transition: transform 0.3s cubic-bezier(0.32, 0.72, 0, 1);
+    padding-bottom: env(safe-area-inset-bottom, 16px);
+    scrollbar-width: none;
+  }
+  .sheet::-webkit-scrollbar { display: none; }
+
+  .sheet.open { transform: translateY(0); }
+
+  .sheet-handle {
+    width: 36px; height: 4px;
+    background: var(--border);
+    border-radius: 2px;
+    margin: 10px auto 4px;
+  }
+
+  .sheet-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 8px 16px 12px;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .sheet-title {
+    font-family: var(--font-display);
+    font-size: 10px;
+    letter-spacing: 3px;
+    color: var(--text-muted);
+  }
+
+  .sheet-close {
+    background: transparent;
+    border: none;
+    color: var(--text-muted);
+    font-size: 18px;
+    cursor: pointer;
+    line-height: 1;
+    padding: 4px;
+  }
+
+  /* ─── RESPONSIVE ─── */
+
+  /* Tablet (iPad) */
+  @media (max-width: 900px) {
+    .body {
+      grid-template-columns: 1fr 200px;
+    }
+    .section-title { font-size: 7px; }
+    .btn { height: 32px; font-size: 10px; }
+  }
+
+  /* Mobile */
+  @media (max-width: 600px) {
+    html, body { overflow: hidden; }
+
+    .app {
+      grid-template-rows: auto 1fr auto;
+      height: 100dvh;
+    }
+
+    header { padding: 8px 12px; }
+
+    .header-meta .status-badge { display: none; }
+
+    .body {
+      grid-template-columns: 1fr;
+      grid-template-rows: 1fr;
+    }
+
+    /* hide sidebar on mobile — use bottom sheet */
+    .controls { display: none; }
+
+    .mobile-toggle { display: flex; }
+    .sheet-overlay { display: block; opacity: 0; pointer-events: none; transition: opacity 0.3s; }
+    .sheet-overlay.open { opacity: 1; pointer-events: all; }
+
+    .canvas-zone { border-right: none; }
+
+    footer { padding: 6px 12px; }
+    .footer-stat { font-size: 8px; }
+    .footer-btn { font-size: 8px; padding: 0 10px; }
+  }
+
+  /* Very small phones */
+  @media (max-width: 380px) {
+    .logo { letter-spacing: 2px; }
+    .footer-actions .footer-btn:nth-child(2) { display: none; }
+  }
+
+  /* Large desktop */
+  @media (min-width: 1400px) {
+    .body { 
+        grid-template-columns: 1fr 280px; 
+        --panel-pad: 18px;
+    }
+  }
+
+  /* hidden input */
+  #fileInput { display: none; }
+</style>
+</head>
+<body>
+
+<div class="app">
+
+  <!-- HEADER -->
+  <header>
+    <div class="logo">
+      <span class="logo-dot" id="logoDot"></span>ASCII_Ver1
+    </div>
+    <div class="header-meta">
+      <span id="fpsDisplay" style="font-size:10px;letter-spacing:1px;color:var(--text-muted)">0 FPS</span>
+      <span class="status-badge" id="statusBadge">STANDBY</span>
+    </div>
+  </header>
+
+  <!-- MAIN -->
+  <div class="body">
+
+    <!-- CANVAS -->
+    <div class="canvas-zone" id="canvasZone">
+      <div class="corner corner-tl"></div>
+      <div class="corner corner-tr"></div>
+      <div class="corner corner-bl"></div>
+      <div class="corner corner-br"></div>
+
+      <canvas id="outputCanvas"></canvas>
+
+      <div class="empty-state" id="emptyState">
+        <div class="empty-icon">[ ░ ]</div>
+        <div class="empty-text">
+          ACTIVATE WEBCAM OR UPLOAD IMAGE<br>
+          <span style="font-size:9px;letter-spacing:1px">Pixel luminance → character mapping</span>
+        </div>
+      </div>
+
+      <div class="hud" id="hud" style="display:none">
+        <span>COLS: <b id="hudCols">—</b></span>
+        <span>ROWS: <b id="hudRows">—</b></span>
+        <span>SRC: <b id="hudSrc">—</b></span>
+      </div>
+    </div>
+
+    <!-- CONTROLS SIDEBAR -->
+    <div class="controls" id="controlsPanel">
+
+      <!-- INPUT -->
+      <div class="section">
+        <div class="section-title">Input Source</div>
+        <button class="btn" id="webcamBtn" onclick="toggleWebcam()">▶ Webcam</button>
+        <button class="btn" onclick="document.getElementById('fileInput').click()">⬆ Upload Image</button>
+        <input type="file" id="fileInput" accept="image/*" onchange="loadImage(event)">
+      </div>
+
+      <!-- RENDER -->
+      <div class="section">
+        <div class="section-title">Render Settings</div>
+
+        <div class="slider-row">
+          <div class="slider-label">
+            <span class="slider-name">Font Size</span>
+            <span class="slider-val" id="fontSizeVal">8px</span>
+          </div>
+          <input type="range" id="fontSizeSlider" min="4" max="20" step="1" value="8" oninput="onSlider()">
+        </div>
+
+        <div class="slider-row">
+          <div class="slider-label">
+            <span class="slider-name">Contrast</span>
+            <span class="slider-val" id="contrastVal">1.2×</span>
+          </div>
+          <input type="range" id="contrastSlider" min="0.1" max="5" step="0.1" value="1.2" oninput="onSlider()">
+        </div>
+
+        <div class="slider-row">
+          <div class="slider-label">
+            <span class="slider-name">Brightness</span>
+            <span class="slider-val" id="brightnessVal">0</span>
+          </div>
+          <input type="range" id="brightnessSlider" min="-100" max="100" step="1" value="0" oninput="onSlider()">
+        </div>
+
+        <div class="slider-row">
+          <div class="slider-label">
+            <span class="slider-name">Saturation</span>
+            <span class="slider-val" id="saturationVal">1.0×</span>
+          </div>
+          <input type="range" id="saturationSlider" min="0" max="3" step="0.1" value="1.0" oninput="onSlider()">
+        </div>
+      </div>
+
+      <!-- CHAR SETS -->
+      <div class="section">
+        <div class="section-title">Character Set</div>
+        <div class="btn-grid" id="charSetBtns">
+          <button class="btn active" data-set="complex" onclick="setCharSet(this)">Complex</button>
+          <button class="btn" data-set="simple" onclick="setCharSet(this)">Simple</button>
+          <button class="btn" data-set="binary" onclick="setCharSet(this)">Binary</button>
+          <button class="btn" data-set="blocks" onclick="setCharSet(this)">Blocks</button>
+          <button class="btn" data-set="braille" onclick="setCharSet(this)">Braille</button>
+          <button class="btn" data-set="waves" onclick="setCharSet(this)">Waves</button>
+        </div>
+        <input type="text" class="custom-input" id="customChars" placeholder="Custom chars…" oninput="onCustomChars()">
+        <div class="chars-preview" id="charsPreview"></div>
+      </div>
+
+      <!-- COLOR MODE -->
+      <div class="section">
+        <div class="section-title">Color Mode</div>
+        <div class="color-grid" id="colorModeBtns">
+          <button class="color-swatch active" data-mode="matrix" onclick="setColorMode(this)" style="color:#00ff41;border-color:#00ff4140">Matrix</button>
+          <button class="color-swatch" data-mode="white" onclick="setColorMode(this)" style="color:#fff;border-color:#ffffff30">White</button>
+          <button class="color-swatch" data-mode="amber" onclick="setColorMode(this)" style="color:#ffb300;border-color:#ffb30040">Amber</button>
+          <button class="color-swatch" data-mode="cyan" onclick="setColorMode(this)" style="color:#00e5ff;border-color:#00e5ff40">Cyan</button>
+          <button class="color-swatch" data-mode="color" onclick="setColorMode(this)" style="background:linear-gradient(135deg,#f00,#0f0,#00f);border-color:#ffffff30;color:#fff">Color</button>
+          <button class="color-swatch" data-mode="invert" onclick="setColorMode(this)" style="background:#fff;color:#000;border-color:#ffffff40">Invert</button>
+        </div>
+      </div>
+
+      <!-- EXPORT -->
+      <div class="section">
+        <div class="section-title">Export</div>
+        <button class="btn" id="dlBtn" onclick="downloadPNG()" disabled>⬇ Download PNG</button>
+        <button class="btn" id="copyBtn" onclick="copyASCII()" disabled>⬆ Copy Text</button>
+        <button class="btn" id="copyHtmlBtn" onclick="copyHTML()" disabled>◈ Copy as HTML</button>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- FOOTER -->
+  <footer>
+    <div class="footer-left">
+      <span class="footer-stat">GRID: <b id="footCols">—</b>×<b id="footRows">—</b></span>
+      <span class="footer-stat">CHARS: <b id="footChars">—</b></span>
+      <span class="footer-stat">MODE: <b id="footMode">MATRIX</b></span>
+    </div>
+    <div class="footer-actions">
+      <button class="footer-btn" id="footDlBtn" onclick="downloadPNG()" disabled>⬇ PNG</button>
+      <button class="footer-btn" id="footCopyBtn" onclick="copyASCII()" disabled>⬆ TEXT</button>
+    </div>
+  </footer>
+
+</div>
+
+<!-- MOBILE TOGGLE -->
+<button class="mobile-toggle" id="mobileToggle" onclick="openSheet()">⚙</button>
+
+<!-- SHEET OVERLAY -->
+<div class="sheet-overlay" id="sheetOverlay" onclick="closeSheet()"></div>
+
+<!-- BOTTOM SHEET (mobile) -->
+<div class="sheet" id="sheet">
+  <div class="sheet-handle"></div>
+  <div class="sheet-header">
+    <span class="sheet-title">Controls</span>
+    <button class="sheet-close" onclick="closeSheet()">×</button>
+  </div>
+
+  <!-- Same controls duplicated for mobile sheet -->
+  <div class="section">
+    <div class="section-title">Input Source</div>
+    <button class="btn" id="webcamBtnM" onclick="toggleWebcam()">▶ Webcam</button>
+    <button class="btn" onclick="document.getElementById('fileInput').click()">⬆ Upload Image</button>
+  </div>
+
+  <div class="section">
+    <div class="section-title">Render Settings</div>
+    <div class="slider-row">
+      <div class="slider-label"><span class="slider-name">Font Size</span><span class="slider-val" id="fontSizeValM">8px</span></div>
+      <input type="range" id="fontSizeSliderM" min="4" max="20" step="1" value="8" oninput="onSliderM()">
+    </div>
+    <div class="slider-row">
+      <div class="slider-label"><span class="slider-name">Contrast</span><span class="slider-val" id="contrastValM">1.2×</span></div>
+      <input type="range" id="contrastSliderM" min="0.1" max="5" step="0.1" value="1.2" oninput="onSliderM()">
+    </div>
+    <div class="slider-row">
+      <div class="slider-label"><span class="slider-name">Brightness</span><span class="slider-val" id="brightnessValM">0</span></div>
+      <input type="range" id="brightnessSliderM" min="-100" max="100" step="1" value="0" oninput="onSliderM()">
+    </div>
+  </div>
+
+  <div class="section">
+    <div class="section-title">Character Set</div>
+    <div class="btn-grid">
+      <button class="btn active" data-set="complex" onclick="setCharSet(this)">Complex</button>
+      <button class="btn" data-set="simple" onclick="setCharSet(this)">Simple</button>
+      <button class="btn" data-set="binary" onclick="setCharSet(this)">Binary</button>
+      <button class="btn" data-set="blocks" onclick="setCharSet(this)">Blocks</button>
+      <button class="btn" data-set="braille" onclick="setCharSet(this)">Braille</button>
+      <button class="btn" data-set="waves" onclick="setCharSet(this)">Waves</button>
+    </div>
+  </div>
+
+  <div class="section">
+    <div class="section-title">Color Mode</div>
+    <div class="color-grid">
+      <button class="color-swatch active" data-mode="matrix" onclick="setColorMode(this)" style="color:#00ff41;border-color:#00ff4140">Matrix</button>
+      <button class="color-swatch" data-mode="white" onclick="setColorMode(this)" style="color:#fff;border-color:#ffffff30">White</button>
+      <button class="color-swatch" data-mode="amber" onclick="setColorMode(this)" style="color:#ffb300;border-color:#ffb30040">Amber</button>
+      <button class="color-swatch" data-mode="cyan" onclick="setColorMode(this)" style="color:#00e5ff;border-color:#00e5ff40">Cyan</button>
+      <button class="color-swatch" data-mode="color" onclick="setColorMode(this)" style="background:linear-gradient(135deg,#f00,#0f0,#00f);border-color:#ffffff30;color:#fff">Color</button>
+      <button class="color-swatch" data-mode="invert" onclick="setColorMode(this)" style="background:#fff;color:#000;border-color:#ffffff40">Invert</button>
+    </div>
+  </div>
+</div>
+
+<!-- NOTIFICATION -->
+<div class="notif" id="notif"></div>
+
+<canvas id="hiddenCanvas" style="display:none"></canvas>
+<video id="hiddenVideo" style="display:none" playsinline muted></video>
+
+<script>
+/* ─────────────────────────────────────────
+   CONFIG
+───────────────────────────────────────── */
+const CHAR_SETS = {
+  complex: '$@B%8&WM#*oahkbdpqwmZO0QLCJUYXzcvunxrjft/\\|()1{}[]?-_+~<>i!lI;:,". ',
+  simple:  '@#%?*+;:,. ',
+  binary:  '10',
+  blocks:  '█▓▒░ ',
+  braille: '⣿⣷⣯⣟⡿⢿⣻⣽⣾⠿⢻⡻⣹⢹⡹⣸⢸⡸⣼⢼⡼⣵⢵⡵⣶⢶⡶⣧⢧⡧⣴⢴⡴⣲⢲⡲  ',
+  waves:   '~≈∿∼≋∾ ',
+};
+
+const COLOR_MODES = {
+  matrix: { bg:'#000', apply:(r,g,b,ctx)=>{ ctx.fillStyle='#00ff41'; } },
+  white:  { bg:'#000', apply:(r,g,b,ctx)=>{ ctx.fillStyle='#ffffff'; } },
+  amber:  { bg:'#000', apply:(r,g,b,ctx)=>{ ctx.fillStyle='#ffb300'; } },
+  cyan:   { bg:'#000', apply:(r,g,b,ctx)=>{ ctx.fillStyle='#00e5ff'; } },
+  color:  { bg:'#000', apply:(r,g,b,ctx,sat)=>{
+    const avg=(r+g+b)/3;
+    const sr=Math.min(255,avg+(r-avg)*sat);
+    const sg=Math.min(255,avg+(g-avg)*sat);
+    const sb=Math.min(255,avg+(b-avg)*sat);
+    ctx.fillStyle=`rgb(${Math.round(sr)},${Math.round(sg)},${Math.round(sb)})`;
+  }},
+  invert: { bg:'#ffffff', apply:(r,g,b,ctx)=>{ ctx.fillStyle='#000'; } },
+};
+
+/* ─────────────────────────────────────────
+   STATE
+───────────────────────────────────────── */
+let state = {
+  source: 'idle',
+  fontSize: 8,
+  contrast: 1.2,
+  brightness: 0,
+  saturation: 1.0,
+  charSet: 'complex',
+  colorMode: 'matrix',
+  customChars: '',
+};
+
+let stream = null;
+let rafId = null;
+let uploadedImg = null;
+let fpsCounter = { frames: 0, last: 0, fps: 0 };
+let gridSize = { cols: 0, rows: 0 };
+
+const els = {
+  outputCanvas: document.getElementById('outputCanvas'),
+  hiddenCanvas: document.getElementById('hiddenCanvas'),
+  video: document.getElementById('hiddenVideo'),
+  emptyState: document.getElementById('emptyState'),
+  hud: document.getElementById('hud'),
+  statusBadge: document.getElementById('statusBadge'),
+  fpsDisplay: document.getElementById('fpsDisplay'),
+  notif: document.getElementById('notif'),
+};
+
+/* ─────────────────────────────────────────
+   CHAR HELPERS
+───────────────────────────────────────── */
+function getChars() {
+  const c = state.customChars.trim();
+  return c.length >= 2 ? c : (CHAR_SETS[state.charSet] || CHAR_SETS.complex);
+}
+
+function updateCharsPreview() {
+  const c = getChars();
+  const el = document.getElementById('charsPreview');
+  if (el) el.textContent = c.slice(0, 80) + (c.length > 80 ? '…' : '');
+  document.getElementById('footChars').textContent = c.length;
+}
+
+/* ─────────────────────────────────────────
+   RENDER LOOP
+───────────────────────────────────────── */
+function processFrame() {
+  const hidden = els.hiddenCanvas;
+  const output = els.outputCanvas;
+  const zone = document.getElementById('canvasZone');
+
+  const src = state.source === 'webcam' ? els.video : uploadedImg;
+  if (!src) return;
+  if (state.source === 'webcam' && (els.video.readyState < 2 || els.video.paused)) return;
+
+  const ow = zone.clientWidth;
+  const oh = zone.clientHeight;
+  if (ow === 0 || oh === 0) return;
+
+  output.width = ow;
+  output.height = oh;
+
+  const fs = state.fontSize;
+  const fw = fs * 0.6;
+  const fh = fs;
+  const cols = Math.max(1, Math.floor(ow / fw));
+  const rows = Math.max(1, Math.floor(oh / fh));
+
+  hidden.width = cols;
+  hidden.height = rows;
+
+  const hctx = hidden.getContext('2d', { willReadFrequently: true });
+  hctx.drawImage(src, 0, 0, cols, rows);
+  const imgData = hctx.getImageData(0, 0, cols, rows).data;
+
+  const octx = output.getContext('2d');
+  const mode = COLOR_MODES[state.colorMode] || COLOR_MODES.matrix;
+  octx.fillStyle = mode.bg;
+  octx.fillRect(0, 0, ow, oh);
+  octx.font = `${fs}px 'Share Tech Mono', monospace`;
+  octx.textBaseline = 'top';
+
+  const chars = getChars();
+  const clen = chars.length - 1;
+  const contrast = state.contrast;
+  const brightness = state.brightness;
+  const saturation = state.saturation;
+
+  for (let row = 0; row < rows; row++) {
+    for (let col = 0; col < cols; col++) {
+      const i = (row * cols + col) * 4;
+      const r = imgData[i], g = imgData[i+1], b = imgData[i+2];
+      let lum = 0.2126 * r + 0.7152 * g + 0.0722 * b;
+      lum = Math.min(255, Math.max(0, (lum - 128) * contrast + 128 + brightness));
+      const idx = Math.floor((lum / 255) * clen);
+      const ch = chars[idx] || ' ';
+      mode.apply(r, g, b, octx, saturation);
+      octx.fillText(ch, col * fw, row * fh);
+    }
+  }
+
+  // FPS
+  fpsCounter.frames++;
+  const now = performance.now();
+  if (now - fpsCounter.last > 600) {
+    fpsCounter.fps = Math.round(fpsCounter.frames * 1000 / (now - fpsCounter.last));
+    fpsCounter.frames = 0;
+    fpsCounter.last = now;
+    els.fpsDisplay.textContent = fpsCounter.fps + ' FPS';
+  }
+
+  // HUD / footer
+  if (cols !== gridSize.cols || rows !== gridSize.rows) {
+    gridSize = { cols, rows };
+    document.getElementById('hudCols').textContent = cols;
+    document.getElementById('hudRows').textContent = rows;
+    document.getElementById('hudSrc').textContent = state.source.toUpperCase();
+    document.getElementById('footCols').textContent = cols;
+    document.getElementById('footRows').textContent = rows;
+  }
+}
+
+function startLoop() {
+  if (rafId) cancelAnimationFrame(rafId);
+  const loop = () => {
+    processFrame();
+    rafId = requestAnimationFrame(loop);
+  };
+  rafId = requestAnimationFrame(loop);
+}
+
+function stopLoop() {
+  if (rafId) { cancelAnimationFrame(rafId); rafId = null; }
+}
+
+/* ─────────────────────────────────────────
+   WEBCAM
+───────────────────────────────────────── */
+async function toggleWebcam() {
+  if (state.source === 'webcam') {
+    stopWebcam(); return;
+  }
+  try {
+    stream = await navigator.mediaDevices.getUserMedia({
+      video: { width: { ideal: 1280 }, height: { ideal: 720 }, frameRate: { ideal: 30 } }
+    });
+    els.video.srcObject = stream;
+    await els.video.play();
+    state.source = 'webcam';
+    setActiveSource();
+    showContent();
+    startLoop();
+  } catch(e) {
+    notify('Camera denied or unavailable');
+  }
+}
+
+function stopWebcam() {
+  if (stream) { stream.getTracks().forEach(t => t.stop()); stream = null; }
+  els.video.srcObject = null;
+  state.source = 'idle';
+  setActiveSource();
+  hideContent();
+  stopLoop();
+}
+
+/* ─────────────────────────────────────────
+   IMAGE UPLOAD
+───────────────────────────────────────── */
+function loadImage(e) {
+  const file = e.target.files[0];
+  if (!file) return;
+  const url = URL.createObjectURL(file);
+  const img = new Image();
+  img.onload = () => {
+    if (stream) { stream.getTracks().forEach(t => t.stop()); stream = null; }
+    uploadedImg = img;
+    state.source = 'image';
+    setActiveSource();
+    showContent();
+    startLoop();
+    closeSheet();
+    notify('Image loaded: ' + file.name);
+  };
+  img.src = url;
+  e.target.value = '';
+}
+
+/* ─────────────────────────────────────────
+   UI STATE HELPERS
+───────────────────────────────────────── */
+function showContent() {
+  els.emptyState.style.display = 'none';
+  els.hud.style.display = 'block';
+  els.outputCanvas.style.display = 'block';
+  const live = state.source === 'webcam';
+  els.statusBadge.textContent = live ? 'LIVE' : 'IMAGE';
+  els.statusBadge.className = 'status-badge' + (live ? ' live' : '');
+  ['dlBtn','copyBtn','copyHtmlBtn','footDlBtn','footCopyBtn'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.disabled = false;
+  });
+}
+
+function hideContent() {
+  els.emptyState.style.display = 'flex';
+  els.hud.style.display = 'none';
+  els.outputCanvas.style.display = 'none';
+  els.statusBadge.textContent = 'STANDBY';
+  els.statusBadge.className = 'status-badge';
+  els.fpsDisplay.textContent = '0 FPS';
+  ['dlBtn','copyBtn','copyHtmlBtn','footDlBtn','footCopyBtn'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.disabled = true;
+  });
+}
+
+function setActiveSource() {
+  const webcamLabel = state.source === 'webcam' ? '■ Stop Webcam' : '▶ Webcam';
+  ['webcamBtn','webcamBtnM'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) {
+      el.textContent = webcamLabel;
+      el.className = 'btn' + (state.source === 'webcam' ? ' active' : '');
+    }
+  });
+  document.getElementById('footMode').textContent = state.colorMode.toUpperCase();
+}
+
+/* ─────────────────────────────────────────
+   SLIDERS
+───────────────────────────────────────── */
+function onSlider() {
+  state.fontSize   = +document.getElementById('fontSizeSlider').value;
+  state.contrast   = +document.getElementById('contrastSlider').value;
+  state.brightness = +document.getElementById('brightnessSlider').value;
+  state.saturation = +document.getElementById('saturationSlider').value;
+
+  document.getElementById('fontSizeVal').textContent   = state.fontSize + 'px';
+  document.getElementById('contrastVal').textContent   = state.contrast.toFixed(1) + '×';
+  document.getElementById('brightnessVal').textContent = (state.brightness > 0 ? '+' : '') + state.brightness;
+  document.getElementById('saturationVal').textContent = state.saturation.toFixed(1) + '×';
+
+  syncMobileSliders();
+}
+
+function onSliderM() {
+  state.fontSize   = +document.getElementById('fontSizeSliderM').value;
+  state.contrast   = +document.getElementById('contrastSliderM').value;
+  state.brightness = +document.getElementById('brightnessSliderM').value;
+
+  document.getElementById('fontSizeValM').textContent   = state.fontSize + 'px';
+  document.getElementById('contrastValM').textContent   = state.contrast.toFixed(1) + '×';
+  document.getElementById('brightnessValM').textContent = (state.brightness > 0 ? '+' : '') + state.brightness;
+
+  // sync desktop
+  document.getElementById('fontSizeSlider').value   = state.fontSize;
+  document.getElementById('contrastSlider').value   = state.contrast;
+  document.getElementById('brightnessSlider').value = state.brightness;
+  document.getElementById('fontSizeVal').textContent   = state.fontSize + 'px';
+  document.getElementById('contrastVal').textContent   = state.contrast.toFixed(1) + '×';
+  document.getElementById('brightnessVal').textContent = (state.brightness > 0 ? '+' : '') + state.brightness;
+}
+
+function syncMobileSliders() {
+  document.getElementById('fontSizeSliderM').value   = state.fontSize;
+  document.getElementById('contrastSliderM').value   = state.contrast;
+  document.getElementById('brightnessSliderM').value = state.brightness;
+  document.getElementById('fontSizeValM').textContent   = state.fontSize + 'px';
+  document.getElementById('contrastValM').textContent   = state.contrast.toFixed(1) + '×';
+  document.getElementById('brightnessValM').textContent = (state.brightness > 0 ? '+' : '') + state.brightness;
+}
+
+/* ─────────────────────────────────────────
+   CHAR SET
+───────────────────────────────────────── */
+function setCharSet(btn) {
+  state.charSet = btn.dataset.set;
+  state.customChars = '';
+  document.getElementById('customChars').value = '';
+  // deactivate all charset buttons in both panels
+  document.querySelectorAll('[data-set]').forEach(b => b.classList.remove('active'));
+  document.querySelectorAll(`[data-set="${state.charSet}"]`).forEach(b => b.classList.add('active'));
+  updateCharsPreview();
+}
+
+function onCustomChars() {
+  state.customChars = document.getElementById('customChars').value;
+  if (state.customChars.trim().length >= 2) {
+    document.querySelectorAll('[data-set]').forEach(b => b.classList.remove('active'));
+  }
+  updateCharsPreview();
+}
+
+/* ─────────────────────────────────────────
+   COLOR MODE
+───────────────────────────────────────── */
+function setColorMode(btn) {
+  state.colorMode = btn.dataset.mode;
+  document.querySelectorAll('[data-mode]').forEach(b => b.classList.remove('active'));
+  document.querySelectorAll(`[data-mode="${state.colorMode}"]`).forEach(b => b.classList.add('active'));
+  document.getElementById('footMode').textContent = state.colorMode.toUpperCase();
+}
+
+/* ─────────────────────────────────────────
+   EXPORT
+───────────────────────────────────────── */
+function downloadPNG() {
+  const canvas = els.outputCanvas;
+  if (!canvas || state.source === 'idle') return;
+  const a = document.createElement('a');
+  a.href = canvas.toDataURL('image/png');
+  a.download = 'ascii-art-' + Date.now() + '.png';
+  a.click();
+  notify('PNG downloaded!');
+}
+
+function getRawASCII() {
+  const src = state.source === 'webcam' ? els.video : uploadedImg;
+  if (!src) return '';
+  const hidden = els.hiddenCanvas;
+  const chars = getChars();
+  const fs = state.fontSize;
+  const fw = fs * 0.6, fh = fs;
+  const zone = document.getElementById('canvasZone');
+  const ow = zone.clientWidth, oh = zone.clientHeight;
+  const cols = Math.floor(ow / fw), rows = Math.floor(oh / fh);
+  hidden.width = cols; hidden.height = rows;
+  const hctx = hidden.getContext('2d', { willReadFrequently: true });
+  hctx.drawImage(src, 0, 0, cols, rows);
+  const data = hctx.getImageData(0, 0, cols, rows).data;
+  const clen = chars.length - 1;
+  let txt = '';
+  for (let row = 0; row < rows; row++) {
+    for (let col = 0; col < cols; col++) {
+      const i = (row * cols + col) * 4;
+      let lum = 0.2126 * data[i] + 0.7152 * data[i+1] + 0.0722 * data[i+2];
+      lum = Math.min(255, Math.max(0, (lum - 128) * state.contrast + 128 + state.brightness));
+      txt += chars[Math.floor((lum / 255) * clen)] || ' ';
+    }
+    txt += '\n';
+  }
+  return txt;
+}
+
+function copyASCII() {
+  const txt = getRawASCII();
+  if (!txt) return;
+  navigator.clipboard.writeText(txt).then(() => notify('ASCII text copied!')).catch(() => notify('Copy failed'));
+}
+
+function copyHTML() {
+  const txt = getRawASCII();
+  if (!txt) return;
+  const modeColors = {
+    matrix:'#00ff41', white:'#ffffff', amber:'#ffb300',
+    cyan:'#00e5ff', color:'#00ff41', invert:'#000000'
+  };
+  const bg = COLOR_MODES[state.colorMode]?.bg || '#000';
+  const fg = modeColors[state.colorMode] || '#00ff41';
+  const html = `<pre style="background:${bg};color:${fg};font-family:'Courier New',monospace;font-size:8px;line-height:1;padding:8px">${txt.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')}</pre>`;
+  navigator.clipboard.writeText(html).then(() => notify('HTML copied!')).catch(() => notify('Copy failed'));
+}
+
+/* ─────────────────────────────────────────
+   NOTIFICATION
+───────────────────────────────────────── */
+let notifTimer = null;
+function notify(msg) {
+  const el = els.notif;
+  el.textContent = msg;
+  el.classList.add('show');
+  if (notifTimer) clearTimeout(notifTimer);
+  notifTimer = setTimeout(() => el.classList.remove('show'), 2200);
+}
+
+/* ─────────────────────────────────────────
+   MOBILE SHEET
+───────────────────────────────────────── */
+function openSheet() {
+  document.getElementById('sheet').classList.add('open');
+  document.getElementById('sheetOverlay').classList.add('open');
+  document.body.style.overflow = 'hidden';
+}
+function closeSheet() {
+  document.getElementById('sheet').classList.remove('open');
+  document.getElementById('sheetOverlay').classList.remove('open');
+  document.body.style.overflow = '';
+}
+
+/* ─────────────────────────────────────────
+   RESIZE HANDLER
+───────────────────────────────────────── */
+let resizeTimer;
+window.addEventListener('resize', () => {
+  clearTimeout(resizeTimer);
+  resizeTimer = setTimeout(() => {
+    if (state.source !== 'idle') {
+      gridSize = { cols: 0, rows: 0 }; // force HUD update
+    }
+  }, 150);
+});
+
+/* ─────────────────────────────────────────
+   KEYBOARD SHORTCUTS
+───────────────────────────────────────── */
+document.addEventListener('keydown', e => {
+  if (e.target.tagName === 'INPUT') return;
+  if (e.key === 'w' || e.key === 'W') toggleWebcam();
+  if (e.key === 's' || e.key === 'S') downloadPNG();
+  if (e.key === 'c' || e.key === 'C') copyASCII();
+  if (e.key === '+' || e.key === '=') {
+    const sl = document.getElementById('fontSizeSlider');
+    sl.value = Math.min(20, +sl.value + 1);
+    onSlider();
+  }
+  if (e.key === '-') {
+    const sl = document.getElementById('fontSizeSlider');
+    sl.value = Math.max(4, +sl.value - 1);
+    onSlider();
+  }
+});
+
+/* ─────────────────────────────────────────
+   INIT
+───────────────────────────────────────── */
+updateCharsPreview();
+hideContent();
+</script>
+</body>
+</html>

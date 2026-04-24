@@ -773,6 +773,7 @@
         <button class="btn" id="webcamBtn" onclick="toggleWebcam()">▶ Webcam</button>
         <button class="btn" id="flipCamBtn" onclick="switchCamera()" style="display:none;border-color:rgba(0,229,255,0.3);color:rgba(0,229,255,0.7)">⇄ Flip Camera</button>
         <button class="btn" onclick="document.getElementById('fileInput').click()">⬆ Upload Image</button>
+        <button class="btn" id="imageSizeToggleBtn" onclick="toggleImageFitMode()">Image Size: Original</button>
         <input type="file" id="fileInput" accept="image/*" onchange="loadImage(event)">
       </div>
 
@@ -890,6 +891,7 @@
     <button class="btn" id="webcamBtnM" onclick="toggleWebcam()">▶ Webcam</button>
     <button class="btn" id="flipCamBtnM" onclick="switchCamera();closeSheet();" style="display:none;border-color:rgba(0,229,255,0.3);color:rgba(0,229,255,0.7)">⇄ Flip Camera</button>
     <button class="btn" onclick="document.getElementById('fileInput').click()">⬆ Upload Image</button>
+    <button class="btn" id="imageSizeToggleBtnM" onclick="toggleImageFitMode()">Image Size: Original</button>
   </div>
 
   <div class="section">
@@ -984,6 +986,7 @@ let state = {
   saturation: 1.0,
   charSet: 'complex',
   colorMode: 'matrix',
+  imageFitToScreen: false,
   customChars: '',
   facingMode: 'user',   // 'user' = front cam, 'environment' = rear cam
   mobileGrid: false,
@@ -1041,14 +1044,20 @@ function processFrame() {
   const oh = zone.clientHeight;
   if (ow === 0 || oh === 0) return;
 
-  output.width = ow;
-  output.height = oh;
+  const drawSize = getDrawSize(ow, oh);
+  const renderW = drawSize.width;
+  const renderH = drawSize.height;
+
+  applyCanvasDisplaySize(renderW, renderH);
+
+  output.width = renderW;
+  output.height = renderH;
 
   const fs = state.fontSize;
   const fw = fs * 0.6;
   const fh = fs;
-  const cols = Math.max(1, Math.floor(ow / fw));
-  const rows = Math.max(1, Math.floor(oh / fh));
+  const cols = Math.max(1, Math.floor(renderW / fw));
+  const rows = Math.max(1, Math.floor(renderH / fh));
 
   hidden.width = cols;
   hidden.height = rows;
@@ -1072,7 +1081,7 @@ function processFrame() {
   const octx = output.getContext('2d');
   const mode = COLOR_MODES[state.colorMode] || COLOR_MODES.matrix;
   octx.fillStyle = mode.bg;
-  octx.fillRect(0, 0, ow, oh);
+  octx.fillRect(0, 0, renderW, renderH);
   octx.font = `${fs}px 'Share Tech Mono', monospace`;
   octx.textBaseline = 'top';
 
@@ -1295,7 +1304,55 @@ function setActiveSource() {
     const el = document.getElementById(id);
     if (el) el.style.display = isLive ? 'flex' : 'none';
   });
+  updateImageSizeToggleUI();
   document.getElementById('footMode').textContent = state.colorMode.toUpperCase();
+}
+
+function toggleImageFitMode() {
+  state.imageFitToScreen = !state.imageFitToScreen;
+  updateImageSizeToggleUI();
+}
+
+function updateImageSizeToggleUI() {
+  const fit = state.imageFitToScreen;
+  ['imageSizeToggleBtn', 'imageSizeToggleBtnM'].forEach(id => {
+    const el = document.getElementById(id);
+    if (!el) return;
+    el.textContent = `Image Size: ${fit ? 'Fit Screen' : 'Original'}`;
+    el.classList.toggle('active', fit);
+  });
+}
+
+function getDrawSize(zoneW, zoneH) {
+  const isImageMode = state.source === 'image' && uploadedImg;
+  if (!isImageMode) {
+    return { width: zoneW, height: zoneH };
+  }
+
+  const iw = uploadedImg.naturalWidth || uploadedImg.width || zoneW;
+  const ih = uploadedImg.naturalHeight || uploadedImg.height || zoneH;
+  if (iw <= 0 || ih <= 0) {
+    return { width: zoneW, height: zoneH };
+  }
+
+  const fitScale = Math.min(zoneW / iw, zoneH / ih);
+  const scale = state.imageFitToScreen ? fitScale : Math.min(1, fitScale);
+
+  return {
+    width: Math.max(1, Math.round(iw * scale)),
+    height: Math.max(1, Math.round(ih * scale)),
+  };
+}
+
+function applyCanvasDisplaySize(width, height) {
+  const isImageOriginal = state.source === 'image' && !state.imageFitToScreen;
+  if (isImageOriginal) {
+    els.outputCanvas.style.width = width + 'px';
+    els.outputCanvas.style.height = height + 'px';
+  } else {
+    els.outputCanvas.style.width = '100%';
+    els.outputCanvas.style.height = '100%';
+  }
 }
 
 function toggleDesktopPanel() {
@@ -1479,8 +1536,10 @@ function getRawASCII() {
   const fs = state.fontSize;
   const fw = fs * 0.6, fh = fs;
   const zone = document.getElementById('canvasZone');
-  const ow = zone.clientWidth, oh = zone.clientHeight;
-  const cols = Math.floor(ow / fw), rows = Math.floor(oh / fh);
+  const zoneW = zone.clientWidth, zoneH = zone.clientHeight;
+  const drawSize = getDrawSize(zoneW, zoneH);
+  const cols = Math.max(1, Math.floor(drawSize.width / fw));
+  const rows = Math.max(1, Math.floor(drawSize.height / fh));
   hidden.width = cols; hidden.height = rows;
   const hctx = hidden.getContext('2d', { willReadFrequently: true });
 
@@ -1589,6 +1648,7 @@ document.addEventListener('keydown', e => {
 ───────────────────────────────────────── */
 updateCharsPreview();
 hideContent();
+updateImageSizeToggleUI();
 refreshMobileAssistUI();
 </script>
 </body>

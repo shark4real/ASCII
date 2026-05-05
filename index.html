@@ -676,7 +676,7 @@
 }
 
   /* hidden input */
-  #fileInput { display: none; }
+  #fileInput, #videoInput { display: none; }
 
   /* ─── CAMERA SWITCH BUTTON (mobile/tablet) ─── */
   .cam-switch-btn {
@@ -772,9 +772,11 @@
         <div class="section-title">Input Source</div>
         <button class="btn" id="webcamBtn" onclick="toggleWebcam()">▶ Webcam</button>
         <button class="btn" id="flipCamBtn" onclick="switchCamera()" style="display:none;border-color:rgba(0,229,255,0.3);color:rgba(0,229,255,0.7)">⇄ Flip Camera</button>
-        <button class="btn" onclick="document.getElementById('fileInput').click()">⬆ Upload Image</button>
+        <button class="btn" id="imageUploadBtn" onclick="document.getElementById('fileInput').click()">⬆ Upload Image</button>
+        <button class="btn" id="videoUploadBtn" onclick="document.getElementById('videoInput').click()">▶ Upload Video</button>
         <button class="btn" id="imageSizeToggleBtn" onclick="toggleImageFitMode()">Image Size: Original</button>
         <input type="file" id="fileInput" accept="image/*" onchange="loadImage(event)">
+        <input type="file" id="videoInput" accept="video/*" onchange="loadVideo(event)">
       </div>
 
       <!-- RENDER -->
@@ -846,6 +848,7 @@
       <div class="section">
         <div class="section-title">Export</div>
         <button class="btn" id="dlBtn" onclick="captureFrame()" disabled>⬇ Capture</button>
+        <button class="btn" id="dlVideoBtn" onclick="exportAsciiVideo()" disabled>⬇ ASCII Video (WEBM)</button>
         <button class="btn" id="copyBtn" onclick="copyASCII()" disabled>⬆ Copy Text</button>
         <button class="btn" id="copyHtmlBtn" onclick="copyHTML()" disabled>◈ Copy as HTML</button>
       </div>
@@ -862,6 +865,7 @@
     </div>
     <div class="footer-actions">
       <button class="footer-btn" id="footDlBtn" onclick="captureFrame()" disabled>⬇ CAPTURE</button>
+      <button class="footer-btn" id="footVideoBtn" onclick="exportAsciiVideo()" disabled>⬇ ASCII WEBM</button>
       <button class="footer-btn" id="footCopyBtn" onclick="copyASCII()" disabled>⬆ TEXT</button>
     </div>
   </footer>
@@ -890,7 +894,8 @@
     <div class="section-title">Input Source</div>
     <button class="btn" id="webcamBtnM" onclick="toggleWebcam()">▶ Webcam</button>
     <button class="btn" id="flipCamBtnM" onclick="switchCamera();closeSheet();" style="display:none;border-color:rgba(0,229,255,0.3);color:rgba(0,229,255,0.7)">⇄ Flip Camera</button>
-    <button class="btn" onclick="document.getElementById('fileInput').click()">⬆ Upload Image</button>
+    <button class="btn" id="imageUploadBtnM" onclick="document.getElementById('fileInput').click()">⬆ Upload Image</button>
+    <button class="btn" id="videoUploadBtnM" onclick="document.getElementById('videoInput').click()">▶ Upload Video</button>
     <button class="btn" id="imageSizeToggleBtnM" onclick="toggleImageFitMode()">Image Size: Original</button>
   </div>
 
@@ -998,6 +1003,10 @@ let state = {
 let stream = null;
 let rafId = null;
 let uploadedImg = null;
+let uploadedVideoUrl = null;
+let exportVideoBusy = false;
+let activeVideoRecorder = null;
+let videoExportCancelled = false;
 let fpsCounter = { frames: 0, last: 0, fps: 0 };
 let gridSize = { cols: 0, rows: 0 };
 let levelerBound = false;
@@ -1036,7 +1045,7 @@ function processFrame() {
   const output = els.outputCanvas;
   const zone = document.getElementById('canvasZone');
 
-  const src = state.source === 'webcam' ? els.video : uploadedImg;
+  const src = getCurrentSourceElement();
   if (!src) return;
   if (state.source === 'webcam' && (els.video.readyState < 2 || els.video.paused)) return;
 
@@ -1146,12 +1155,54 @@ function stopLoop() {
   if (rafId) { cancelAnimationFrame(rafId); rafId = null; }
 }
 
+function setVideoExportButtonState(isBusy) {
+  const desktop = document.getElementById('dlVideoBtn');
+  const footer = document.getElementById('footVideoBtn');
+  if (desktop) {
+    desktop.textContent = isBusy ? '● Recording…' : '⬇ ASCII Video (WEBM)';
+    desktop.disabled = isBusy || state.source === 'idle';
+  }
+  if (footer) {
+    footer.textContent = isBusy ? '● REC…' : '⬇ ASCII WEBM';
+    footer.disabled = isBusy || state.source === 'idle';
+  }
+}
+
+function stopAsciiVideoExport(cancelDownload = false) {
+  if (!activeVideoRecorder || activeVideoRecorder.state === 'inactive') return;
+  if (cancelDownload) videoExportCancelled = true;
+  activeVideoRecorder.stop();
+}
+
+function revokeUploadedVideoUrl() {
+  if (uploadedVideoUrl) {
+    URL.revokeObjectURL(uploadedVideoUrl);
+    uploadedVideoUrl = null;
+  }
+}
+
+function clearVideoElementSource() {
+  els.video.pause();
+  els.video.removeAttribute('src');
+  els.video.srcObject = null;
+  els.video.load();
+}
+
+function getCurrentSourceElement() {
+  if (state.source === 'image') return uploadedImg;
+  if (state.source === 'webcam' || state.source === 'video') return els.video;
+  return null;
+}
+
 /* ─────────────────────────────────────────
    WEBCAM
 ───────────────────────────────────────── */
 async function startCamera(facingMode) {
   // Stop any existing stream first
+  stopAsciiVideoExport(true);
   if (stream) { stream.getTracks().forEach(t => t.stop()); stream = null; }
+  revokeUploadedVideoUrl();
+  clearVideoElementSource();
 
   // Build constraints — on desktop 'environment' may not exist, fall back gracefully
   const constraints = {
@@ -1198,8 +1249,9 @@ async function toggleWebcam() {
 }
 
 function stopWebcam() {
+  stopAsciiVideoExport(true);
   if (stream) { stream.getTracks().forEach(t => t.stop()); stream = null; }
-  els.video.srcObject = null;
+  clearVideoElementSource();
   state.source = 'idle';
   setActiveSource();
   hideContent();
@@ -1237,6 +1289,9 @@ async function switchCamera() {
 function loadImage(e) {
   const file = e.target.files[0];
   if (!file) return;
+  stopAsciiVideoExport(true);
+  revokeUploadedVideoUrl();
+  clearVideoElementSource();
   const url = URL.createObjectURL(file);
   const img = new Image();
   img.onload = () => {
@@ -1253,6 +1308,36 @@ function loadImage(e) {
   e.target.value = '';
 }
 
+function loadVideo(e) {
+  const file = e.target.files[0];
+  if (!file) return;
+
+  stopAsciiVideoExport(true);
+  if (stream) { stream.getTracks().forEach(t => t.stop()); stream = null; }
+  uploadedImg = null;
+  revokeUploadedVideoUrl();
+
+  const url = URL.createObjectURL(file);
+  uploadedVideoUrl = url;
+
+  const v = els.video;
+  clearVideoElementSource();
+  v.muted = true;
+  v.loop = false;
+  v.onended = () => notify('Video finished');
+  v.onloadedmetadata = () => {
+    state.source = 'video';
+    setActiveSource();
+    showContent();
+    startLoop();
+    v.play().catch(() => {});
+    closeSheet();
+    notify('Video loaded: ' + file.name);
+  };
+  v.src = url;
+  e.target.value = '';
+}
+
 /* ─────────────────────────────────────────
    UI STATE HELPERS
 ───────────────────────────────────────── */
@@ -1261,12 +1346,14 @@ function showContent() {
   els.hud.style.display = 'block';
   els.outputCanvas.style.display = 'block';
   const live = state.source === 'webcam';
-  els.statusBadge.textContent = live ? 'LIVE' : 'IMAGE';
+  const label = state.source === 'webcam' ? 'LIVE' : (state.source === 'video' ? 'VIDEO' : 'IMAGE');
+  els.statusBadge.textContent = label;
   els.statusBadge.className = 'status-badge' + (live ? ' live' : '');
-  ['dlBtn','copyBtn','copyHtmlBtn','footDlBtn','footCopyBtn'].forEach(id => {
+  ['dlBtn','dlVideoBtn','copyBtn','copyHtmlBtn','footDlBtn','footVideoBtn','footCopyBtn'].forEach(id => {
     const el = document.getElementById(id);
     if (el) el.disabled = false;
   });
+  if (exportVideoBusy) setVideoExportButtonState(true);
   // Show camera switch button on mobile/tablet when webcam is active
   const camBtn = document.getElementById('camSwitchBtn');
   if (live) {
@@ -1283,7 +1370,7 @@ function hideContent() {
   els.statusBadge.textContent = 'STANDBY';
   els.statusBadge.className = 'status-badge';
   els.fpsDisplay.textContent = '0 FPS';
-  ['dlBtn','copyBtn','copyHtmlBtn','footDlBtn','footCopyBtn'].forEach(id => {
+  ['dlBtn','dlVideoBtn','copyBtn','copyHtmlBtn','footDlBtn','footVideoBtn','footCopyBtn'].forEach(id => {
     const el = document.getElementById(id);
     if (el) el.disabled = true;
   });
@@ -1291,6 +1378,8 @@ function hideContent() {
 
 function setActiveSource() {
   const isLive = state.source === 'webcam';
+  const isImage = state.source === 'image';
+  const isVideo = state.source === 'video';
   const webcamLabel = isLive ? '■ Stop Webcam' : '▶ Webcam';
   ['webcamBtn','webcamBtnM'].forEach(id => {
     const el = document.getElementById(id);
@@ -1298,6 +1387,14 @@ function setActiveSource() {
       el.textContent = webcamLabel;
       el.className = 'btn' + (isLive ? ' active' : '');
     }
+  });
+  ['imageUploadBtn','imageUploadBtnM'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.className = 'btn' + (isImage ? ' active' : '');
+  });
+  ['videoUploadBtn','videoUploadBtnM'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.className = 'btn' + (isVideo ? ' active' : '');
   });
   // Show/hide flip button in sidebar + sheet
   ['flipCamBtn','flipCamBtnM'].forEach(id => {
@@ -1325,12 +1422,17 @@ function updateImageSizeToggleUI() {
 
 function getDrawSize(zoneW, zoneH) {
   const isImageMode = state.source === 'image' && uploadedImg;
-  if (!isImageMode) {
+  const isVideoMode = state.source === 'video' && els.video.videoWidth && els.video.videoHeight;
+  if (!isImageMode && !isVideoMode) {
     return { width: zoneW, height: zoneH };
   }
 
-  const iw = uploadedImg.naturalWidth || uploadedImg.width || zoneW;
-  const ih = uploadedImg.naturalHeight || uploadedImg.height || zoneH;
+  const iw = isImageMode
+    ? (uploadedImg.naturalWidth || uploadedImg.width || zoneW)
+    : (els.video.videoWidth || zoneW);
+  const ih = isImageMode
+    ? (uploadedImg.naturalHeight || uploadedImg.height || zoneH)
+    : (els.video.videoHeight || zoneH);
   if (iw <= 0 || ih <= 0) {
     return { width: zoneW, height: zoneH };
   }
@@ -1345,8 +1447,8 @@ function getDrawSize(zoneW, zoneH) {
 }
 
 function applyCanvasDisplaySize(width, height) {
-  const isImageOriginal = state.source === 'image' && !state.imageFitToScreen;
-  if (isImageOriginal) {
+  const keepNaturalSize = (state.source === 'image' || state.source === 'video') && !state.imageFitToScreen;
+  if (keepNaturalSize) {
     els.outputCanvas.style.width = width + 'px';
     els.outputCanvas.style.height = height + 'px';
   } else {
@@ -1528,8 +1630,103 @@ function downloadPNG() {
   captureFrame();
 }
 
+async function exportAsciiVideo() {
+  if (exportVideoBusy) return;
+  if (state.source !== 'video') {
+    notify('Upload and select a video first');
+    return;
+  }
+  if (typeof MediaRecorder === 'undefined' || !els.outputCanvas.captureStream) {
+    notify('Video export unsupported in this browser');
+    return;
+  }
+
+  const video = els.video;
+  if (!video || video.readyState < 2 || !isFinite(video.duration) || video.duration <= 0) {
+    notify('Video metadata not ready');
+    return;
+  }
+
+  const outStream = els.outputCanvas.captureStream(30);
+  const mimeCandidates = [
+    'video/webm;codecs=vp9',
+    'video/webm;codecs=vp8',
+    'video/webm'
+  ];
+  let mimeType = '';
+  for (const m of mimeCandidates) {
+    if (MediaRecorder.isTypeSupported(m)) { mimeType = m; break; }
+  }
+
+  let recorder;
+  try {
+    recorder = mimeType
+      ? new MediaRecorder(outStream, { mimeType, videoBitsPerSecond: 6_000_000 })
+      : new MediaRecorder(outStream, { videoBitsPerSecond: 6_000_000 });
+  } catch {
+    outStream.getTracks().forEach(t => t.stop());
+    notify('Failed to initialize video recorder');
+    return;
+  }
+
+  const chunks = [];
+  exportVideoBusy = true;
+  videoExportCancelled = false;
+  activeVideoRecorder = recorder;
+  setVideoExportButtonState(true);
+  notify('Recording ASCII video…');
+
+  const finalize = () => {
+    exportVideoBusy = false;
+    activeVideoRecorder = null;
+    outStream.getTracks().forEach(t => t.stop());
+    setVideoExportButtonState(false);
+  };
+
+  recorder.ondataavailable = e => {
+    if (e.data && e.data.size > 0) chunks.push(e.data);
+  };
+
+  recorder.onerror = () => {
+    finalize();
+    notify('ASCII video export failed');
+  };
+
+  recorder.onstop = () => {
+    if (!videoExportCancelled && chunks.length) {
+      const blob = new Blob(chunks, { type: mimeType || 'video/webm' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `ascii-video-${Date.now()}.webm`;
+      a.click();
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+      notify('ASCII video saved');
+    }
+    finalize();
+  };
+
+  const stopOnEnd = () => {
+    if (recorder.state !== 'inactive') recorder.stop();
+  };
+
+  video.addEventListener('ended', stopOnEnd, { once: true });
+
+  recorder.start(120);
+  video.pause();
+  try { video.currentTime = 0; } catch {}
+  try {
+    await video.play();
+  } catch {
+    video.removeEventListener('ended', stopOnEnd);
+    videoExportCancelled = true;
+    if (recorder.state !== 'inactive') recorder.stop();
+    notify('Could not play video for export');
+  }
+}
+
 function getRawASCII() {
-  const src = state.source === 'webcam' ? els.video : uploadedImg;
+  const src = getCurrentSourceElement();
   if (!src) return '';
   const hidden = els.hiddenCanvas;
   const chars = getChars();
